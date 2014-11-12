@@ -1,0 +1,10 @@
+module.exports = {
+  server: 'irc.freenode.org',
+  nickName: 'BotonJS',
+  loadPlugins: true,
+  debug: true,
+  userName: 'BotonJS',
+  realName: 'BotonJS',
+  channels: ['#malderete_bots']
+};
+

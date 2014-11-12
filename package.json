@@ -1,0 +1,25 @@
+{
+  "name": "ircbot",
+  "version": "0.0.1",
+  "description": "An extensive IRC Bot",
+  "main": "index.js",
+  "dependencies": {
+    "irc": "^0.3.7",
+    "log": "^1.4.0",
+    "request": "^2.42.0",
+    "requests": "0.0.1",
+    "underscore": "^1.6.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "IRC",
+    "Bot",
+    "Networking"
+  ],
+  "author": "Martin Alderete",
+  "email": "malderete@gmail.com",
+  "license": "MIT"
+}
