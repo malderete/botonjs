@@ -17,5 +17,5 @@ Run
 ---
 
 ```bash
-node index.html
+node index.js
 ```
