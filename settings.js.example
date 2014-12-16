@@ -5,6 +5,6 @@ module.exports = {
   debug: true,
   userName: 'BotonJS',
   realName: 'BotonJS',
-  channels: ['#malderete_bots']
+  channels: ['#channel1', '#channel2']
 };
 

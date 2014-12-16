@@ -4,8 +4,9 @@
   "description": "An extensive IRC Bot",
   "main": "index.js",
   "dependencies": {
-    "irc": "^0.3.7",
+    "irc": "martynsmith/node-irc#0.3.x",
     "log": "^1.4.0",
+    "getenv": "0.4.0",
     "request": "^2.42.0",
     "requests": "0.0.1",
     "underscore": "^1.6.0"

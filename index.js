@@ -11,12 +11,15 @@ var options = {
     // IRC library related
     debug: Settings.debug || false,
     floodProtection: true, //make it default in the bot
-    userName: Settings.userName || 'PlatonJS',
-    realName: Settings.realName || 'PlatonJS',
+    userName: Settings.userName || 'BotonJS',
+    realName: Settings.realName || 'BotonJS',
     channels: Settings.channels
 };
 
 var bot = new IRCBot.IRCBot(Settings.server, Settings.nickName, options);
+bot.on('error', function error(message) {
+    console.log(message);
+});
 
 /* Process SIGNAL handlers */
 process.on('SIGINT', function exit() {

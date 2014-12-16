@@ -9,6 +9,7 @@ var util = require('util');
 
 var irc = require('irc');
 var Log = require('log');
+var getenv = require('getenv');
 
 var botUtils = require('./bot_utils.js');
 
@@ -68,7 +69,7 @@ function IRCBot(server, nickname, options) {
 util.inherits(IRCBot, EventEmitter);
 
 IRCBot.prototype.loadPlugins = function (rootDir) {
-    this.logger.debug('Loading Plugins...');
+    this.logger.info('Loading Plugins...');
     var bot = this,
         pluginsFile = fs.readdirSync(rootDir).sort();
 
@@ -80,7 +81,7 @@ IRCBot.prototype.loadPlugins = function (rootDir) {
         try {
             plugin = require(path.join(rootDir, baseName));
             plugin(bot);
-            bot.logger.debug('Loaded successfully: ' + baseName);
+            bot.logger.info('Loaded successfully: ' + baseName);
         } catch (error) {
             bot.logger.error('Error loading the plugin: ' + fileName);
             bot.logger.error(error.stack);
@@ -103,30 +104,62 @@ IRCBot.prototype.setupClientListeners = function () {
         EVENTS.PART,
         EVENTS.KICK,
         EVENTS.QUIT,
-        EVENTS.PRIVATE_MESSAGE,
+        'error'
+        //EVENTS.PRIVATE_MESSAGE,
     ];
     // Get some events and re-emit them with other context
-    events.forEach(function (evt) {
-        self._client.on(evt, function () {
+    events.forEach(function iter(evt) {
+        self._client.on(evt, function wrapper() {
             var args = Array.prototype.slice.call(arguments);
             args.unshift(evt);
             self.emit.apply(self, args);
         });
     });
+    // special handling for private, change the context
+    self._client.on(EVENTS.PRIVATE_MESSAGE, self.handleMessageAdapter.bind(self));
     // special handling for message, change the context
-    self._client.on(EVENTS.MESSAGE, self.handleMessage.bind(self));
+    self._client.on(EVENTS.MESSAGE, self.handleMessageAdapter.bind(self));
 };
 
-IRCBot.prototype.handleMessage = function handleMessage(nick, chan, text, message) {
+
+IRCBot.prototype.handleMessageAdapter = function handleMessageAdapter() {
     var ircClient = this._client,
         my_nick = ircClient.opt.nick,
-        cmd_line = null,
-        cmd = null,
-        c_args = null;
+        blacklistedNicks = null,
+        nick = null, to = null,
+        text = null, message = null,
+        callable = null, cmd_line = null,
+        cmd = null, c_args = null;
+
+    // Dispatch based on the number of arguments
+    if (arguments.length === 3) {
+        // Private Message
+        //nick, text, message
+        nick = arguments[0];
+        to = nick;
+        text = arguments[1];
+        message = arguments[2];
+        callable = this.handlePrivateMessage.bind(this);
+    } else {
+        // General Message
+        //nick, chan, text, message
+        nick = arguments[0];
+        to = arguments[1];
+        text = arguments[2];
+        message = arguments[3];
+        callable = this.handleGeneralMessage.bind(this);
+    }
 
     // Ignore my messages
     if (nick === my_nick) {
-        this.logger.debug('I do not reply to myself...');
+        this.logger.debug('I do not reply to myself!');
+        return;
+    }
+
+    // Ignore blacklisted nicks
+    blacklistedNicks = getenv.array('BLACKLISTED_NICKS', 'string', []);
+    if (blacklistedNicks.indexOf(nick) > -1) {
+        this.logger.debug('I do not reply to blacklisted nicks!');
         return;
     }
 
@@ -136,9 +169,36 @@ IRCBot.prototype.handleMessage = function handleMessage(nick, chan, text, messag
         cmd = cmd_line[0].slice(1);
         c_args = cmd_line.slice(1);
 
-        this.handleCommand(nick, chan, cmd, c_args);
+        this.handleCommand(nick, to, cmd, c_args);
         return;
     }
+
+    // dispatch some custom logic!
+    callable(nick, to, text, message);
+    return;
+}
+
+/**
+ * Special logic for private messages.
+ * @param <String> nick
+ * @param <String> _
+ * @param <String> text
+ * @param <Object> IRC library message
+ */
+IRCBot.prototype.handlePrivateMessage = function handlePrivateMessage(nick, _, text, message) {
+    this.emit(EVENTS.PRIVATE_MESSAGE, nick, text, message);
+};
+
+/**
+ * Special logic for general messages.
+ * @param <String> nick
+ * @param <String> chan
+ * @param <String> text
+ * @param <Object> IRC library message
+ */
+IRCBot.prototype.handleGeneralMessage = function handleGeneralMessage(nick, chan, text, message) {
+    var ircClient = this._client,
+        my_nick = ircClient.opt.nick;
 
     if (text.match(my_nick)) {
         if (botUtils.isChannel(chan)) {
@@ -154,23 +214,27 @@ IRCBot.prototype.handleMessage = function handleMessage(nick, chan, text, messag
 /**
  * Handles the command call the plugins if needed
  * @param <String> nick
- * @param <String> chan
+ * @param <String> to
  * @param <String> cmd
  * @param <Array> cmdArgs
  */
-IRCBot.prototype.handleCommand = function handleCommand(nick, chan, cmd, cmdArgs) {
+IRCBot.prototype.handleCommand = function handleCommand(nick, to, cmd, cmdArgs) {
     var self = this,
+        inPrivate = !botUtils.isChannel(to),
+        commandsLength = this.commands.length,
+        cmdObj = null,
         helpText = [];
 
     if (cmd === CMD_HELP) {
         // @help validCmd
         if (this.commandsNames.indexOf(cmdArgs[0]) > -1) {
+            // Its not possible to have more than one action for a command!
             helpText = this.commands.filter(function filter(obj) { return (obj.cmd === cmdArgs[0]); });
             helpText = helpText[0];
             if (helpText.help === '') {
-                self.say(chan, '@' + helpText.cmd + ' has not help, Im not a mind reader!');
+                self.say(to, '@' + helpText.cmd + ' has not help, Im not a mind reader!');
             } else {
-                self.say(chan, 'Help for @' + helpText.cmd + ': ' + helpText.help);
+                self.say(to, 'Help for @' + helpText.cmd + ': ' + helpText.help);
             }
         } else {
             // @help
@@ -178,19 +242,30 @@ IRCBot.prototype.handleCommand = function handleCommand(nick, chan, cmd, cmdArgs
             this.commands.forEach(function helpIter(obj) {
                 helpText.push(obj.cmd);
             });
-            self.say(chan, 'Available commands: ' + helpText.join(', '));
+            self.say(to, 'Available commands: ' + helpText.join(', '));
         }
         return;
     }
 
     if (this.commandsNames.indexOf(cmd) > -1) {
-        this.commands.forEach(function commandIter(obj) {
-            if (obj.cmd === cmd) {
-                obj.callback.call(self, nick, chan, cmdArgs);
+        for(var index=0; index < commandsLength; index++) {
+            cmdObj = this.commands[index];
+            if (cmdObj.cmd === cmd) {
+                if (cmdObj.onlyPrivate) {
+                    if (inPrivate) {
+                        cmdObj.callback.call(this, nick, to, cmdArgs);
+                    } else {
+                        this.say(to, 'This command has to be used in private!');
+                    }
+                } else {
+                    cmdObj.callback.call(this, nick, to, cmdArgs);
+                }
+                // get out of the loop!
+                break;
             }
-        });
+        }
     } else {
-        this.say(chan, nick + ' I havent seen that command and Im not a wizard yet!');
+        this.say(to, nick + ' I havent seen that command and Im not a wizard yet!');
     }
     return;
 };
@@ -200,8 +275,9 @@ IRCBot.prototype.handleCommand = function handleCommand(nick, chan, cmd, cmdArgs
  * @param <String> cmd
  * @param <Function> callback
  * @param <String> help
+ * @param <Boolean> onlyPrivate
  */
-IRCBot.prototype.registerCommand = function registerCommand(cmd, callback, help) {
+IRCBot.prototype.registerCommand = function registerCommand(cmd, callback, help, onlyPrivate) {
     var self = this;
 
     if (help === undefined) {
@@ -211,16 +287,20 @@ IRCBot.prototype.registerCommand = function registerCommand(cmd, callback, help)
     if (cmd instanceof Array) {
         // multiples commands for an action
         cmd.forEach(function (oneCmd) {
-            self.commands.push({'cmd': oneCmd, 'callback': callback, 'help': help});
             if (self.commandsNames.indexOf(oneCmd) < 0) {
+                self.commands.push({'cmd': oneCmd, 'callback': callback, 'help': help, 'onlyPrivate': onlyPrivate});
                 self.commandsNames.push(oneCmd);
+            } else {
+                this.logger.info('The command (%s) already exists!', oneCmd);
             }
         });
     } else {
         // single command for an action
-        this.commands.push({'cmd': cmd, 'callback': callback, 'help': help});
         if (this.commandsNames.indexOf(cmd) < 0) {
+            this.commands.push({'cmd': cmd, 'callback': callback, 'help': help, 'onlyPrivate': onlyPrivate});
             this.commandsNames.push(cmd);
+        } else {
+            this.logger.info('The command (%s) already exists!', cmd);
         }
     }
 };
