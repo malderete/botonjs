@@ -55,6 +55,7 @@ function IRCBot(server, nickname, options) {
     this._client = new irc.Client(server, nickname, options);
 
     this.config = this._client.opt;
+    this.pluginsSettings = options.pluginsSettings || {};
     this.logger = new Log(options.logLevel || 'info');
 
     this.setupClientListeners();

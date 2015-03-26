@@ -8,6 +8,7 @@ var Settings = require('./settings.js');
 var options = {
     //bot related
     loadPlugins: Settings.loadPlugins || true,
+    pluginsSettings: Settings.pluginsSettings,
     // IRC library related
     debug: Settings.debug || false,
     floodProtection: true, //make it default in the bot
