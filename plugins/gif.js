@@ -20,7 +20,7 @@ function search(user, channel, args) {
         result = null;
 
     if (argsLength < 1) {
-        bot.say(chan, user + ' I can\'t imagine your mind dude');
+        bot.say(channel, user + ' I can\'t imagine your mind dude');
         return;
     }
 
@@ -38,7 +38,7 @@ function search(user, channel, args) {
         if (!error && response.statusCode === 200) {
             // get a random gif from response
             gif = _.sample(JSON.parse(body).data);
-            result = gif.images.fixed_height.url
+            result = gif.images.fixed_height.url;
         } else {
             console.log('Could not retrieve any gifs from giphy');
         }
